@@ -8,17 +8,13 @@ import (
 	"net/url"
 
 	"github.com/corazawaf/coraza/v3"
-	"github.com/corazawaf/coraza/v3/types"
 )
 
 var waf coraza.WAF
 
 func initCoraza() error {
 	config := coraza.NewWAFConfig().WithDirectives(`
-		# Enable rule engine
 		SecRuleEngine On
-
-		# Example rule: Block requests containing 'malicious' in the URI
 		SecRule REQUEST_URI "@contains malicious" "id:1,phase:1,deny,status:403,log,msg:'Potential malicious activity detected'"
 	`)
 
@@ -30,26 +26,18 @@ func initCoraza() error {
 func wafMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx := waf.NewTransaction()
-		defer func() {
-			if tx.Interrupted() {
-				w.WriteHeader(http.StatusForbidden)
-				fmt.Fprintln(w, "Request blocked by WAF")
-				return
-			}
-			tx.ProcessLogging()
-			if err := tx.Close(); err != nil {
-				log.Printf("Error closing transaction: %v", err)
-			}
-		}()
+		defer tx.Close()
 
-		tx.ProcessConnection(r.RemoteAddr, r.Host, r.TLS != nil)
+		// 简化的请求处理
 		tx.ProcessURI(r.URL.String(), r.Method, r.Proto)
 		for k, v := range r.Header {
 			tx.AddRequestHeader(k, v[0])
 		}
 		tx.ProcessRequestHeaders()
 
-		if tx.Interrupted() {
+		if tx.IsInterrupted() {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprintln(w, "Request blocked by WAF")
 			return
 		}
 
@@ -62,7 +50,7 @@ func main() {
 		log.Fatalf("Failed to initialize Coraza: %v", err)
 	}
 
-	backendURL, err := url.Parse("http://localhost:8080") // Change this to your backend service URL
+	backendURL, err := url.Parse("http://localhost:8080") // 修改为您的后端服务 URL
 	if err != nil {
 		log.Fatalf("Invalid backend URL: %v", err)
 	}
