@@ -31,7 +31,7 @@ func wafMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx := waf.NewTransaction()
 		defer func() {
-			if tx.IsInterrupted() {
+			if tx.Interrupted() {
 				w.WriteHeader(http.StatusForbidden)
 				fmt.Fprintln(w, "Request blocked by WAF")
 				return
@@ -42,20 +42,15 @@ func wafMiddleware(next http.Handler) http.Handler {
 			}
 		}()
 
-		ir, err := tx.ProcessRequest(types.RequestData{
-			Method:     r.Method,
-			Headers:    r.Header,
-			Address:    r.RemoteAddr,
-			URI:        r.URL.String(),
-			HTTPVersion: fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor),
-		})
-		if err != nil {
-			log.Printf("Error processing request: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+		tx.ProcessConnection(r.RemoteAddr, r.Host, r.TLS != nil)
+		tx.ProcessURI(r.URL.String(), r.Method, r.Proto)
+		for k, v := range r.Header {
+			tx.AddRequestHeader(k, v[0])
 		}
-		if ir != nil {
-			return // Request was interrupted, response already sent
+		tx.ProcessRequestHeaders()
+
+		if tx.Interrupted() {
+			return
 		}
 
 		next.ServeHTTP(w, r)
