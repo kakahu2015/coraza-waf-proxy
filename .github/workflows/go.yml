@@ -2,12 +2,15 @@ name: Build and Release
 
 on:
   push:
-    branches: [main, master]
-    paths-ignore: [README.md]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [main, master]
+    branches:
+      - main
+      - master
   release:
-    types: [published]
+    types: [created]
   workflow_dispatch:
 
 jobs:
@@ -28,16 +31,15 @@ jobs:
     - name: Build
       run: |
         go version
-        go mod init github.com/${{ github.repository }}
         go mod tidy
         go build -v -o ${{ env.BUNDLE }}
+        chmod +x ${{ env.BUNDLE }}
 
     - name: Pack assets
       run: |
-        rm -rf ${{ env.BUNDLE }}-pack
-        mkdir ${{ env.BUNDLE }}-pack
-        cp ${{ env.BUNDLE }} LICENSE README.md ${{ env.BUNDLE }}-pack/ || true
-        tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}-pack
+        mkdir ${{ env.BUNDLE }}
+        cp ${{ env.BUNDLE }} LICENSE README.md ${{ env.BUNDLE }}/ || true
+        tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
         openssl sha256 ./${{ env.BUNDLE }} > sha256sum.txt
         echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >> $GITHUB_ENV
 
