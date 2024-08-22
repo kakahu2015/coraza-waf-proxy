@@ -13,28 +13,27 @@ import (
 
 var waf coraza.WAF
 
-func init() {
+func initCoraza() error {
+	config := coraza.NewWAFConfig().WithDirectives(`
+		# Enable rule engine
+		SecRuleEngine On
+
+		# Example rule: Block requests containing 'malicious' in the URI
+		SecRule REQUEST_URI "@contains malicious" "id:1,phase:1,deny,status:403,log,msg:'Potential malicious activity detected'"
+	`)
+
 	var err error
-	waf, err = coraza.NewWAF(coraza.NewWAFConfig().
-		WithDirectives(`
-			# Basic Coraza configuration
-			SecRuleEngine On
-			SecRequestBodyAccess On
-			SecResponseBodyAccess On
-			SecRule REQUEST_URI "@contains /admin" "id:1,phase:1,deny,status:403,msg:'Admin access denied'"
-		`))
-	if err != nil {
-		log.Fatalf("Error initializing Coraza: %v", err)
-	}
+	waf, err = coraza.NewWAF(config)
+	return err
 }
 
-func wafHandler(next http.Handler) http.Handler {
+func wafMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx := waf.NewTransaction()
 		defer func() {
 			if tx.IsInterrupted() {
 				w.WriteHeader(http.StatusForbidden)
-				fmt.Fprintln(w, "403 Forbidden - Request blocked by WAF")
+				fmt.Fprintln(w, "Request blocked by WAF")
 				return
 			}
 			tx.ProcessLogging()
@@ -43,11 +42,19 @@ func wafHandler(next http.Handler) http.Handler {
 			}
 		}()
 
-		if it, err := tx.ProcessRequest(r); err != nil {
+		ir, err := tx.ProcessRequest(types.RequestData{
+			Method:     r.Method,
+			Headers:    r.Header,
+			Address:    r.RemoteAddr,
+			URI:        r.URL.String(),
+			HTTPVersion: fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor),
+		})
+		if err != nil {
 			log.Printf("Error processing request: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
-		} else if it != nil {
+		}
+		if ir != nil {
 			return // Request was interrupted, response already sent
 		}
 
@@ -56,13 +63,18 @@ func wafHandler(next http.Handler) http.Handler {
 }
 
 func main() {
-	backendURL, err := url.Parse("http://localhost:8089") // Change this to your backend service URL
+	if err := initCoraza(); err != nil {
+		log.Fatalf("Failed to initialize Coraza: %v", err)
+	}
+
+	backendURL, err := url.Parse("http://localhost:8080") // Change this to your backend service URL
 	if err != nil {
-		log.Fatalf("Error parsing backend URL: %v", err)
+		log.Fatalf("Invalid backend URL: %v", err)
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(backendURL)
-	http.Handle("/", wafHandler(proxy))
+	
+	http.Handle("/", wafMiddleware(proxy))
 
 	log.Println("Starting WAF proxy on :8000...")
 	if err := http.ListenAndServe(":8000", nil); err != nil {
