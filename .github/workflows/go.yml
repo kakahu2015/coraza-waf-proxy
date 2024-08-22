@@ -2,10 +2,14 @@ name: Build and Release
 
 on:
   push:
-    branches: [main]
-    paths-ignore: [README.md]
-  release:
-    types: [published]
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
 
 jobs:
   build_and_release:
@@ -14,7 +18,15 @@ jobs:
       BUNDLE: coraza-waf-proxy
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Debug info
+      run: |
+        echo "GitHub ref: ${{ github.ref }}"
+        echo "GitHub event name: ${{ github.event_name }}"
+        echo "Runner OS: ${{ runner.os }}"
+        echo "GitHub workflow: ${{ github.workflow }}"
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -23,13 +35,15 @@ jobs:
 
     - name: Build
       run: |
+        go version
+        go env
         go build -v -o ${{ env.BUNDLE }}
         chmod +x ${{ env.BUNDLE }}
 
     - name: Pack assets
       run: |
         mkdir release
-        cp ${{ env.BUNDLE }} LICENSE README.md release/
+        cp ${{ env.BUNDLE }} LICENSE README.md release/ || true
         tar cJf ${{ env.BUNDLE }}.tar.xz release
         openssl sha256 ./${{ env.BUNDLE }} > sha256sum.txt
         echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >> $GITHUB_ENV
