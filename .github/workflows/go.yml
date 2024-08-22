@@ -33,6 +33,11 @@ jobs:
       with:
         go-version: ^1.21
 
+    - name: Initialize Go module
+      run: |
+        go mod init github.com/${{ github.repository }}
+        go mod tidy
+
     - name: Build
       run: |
         go version
