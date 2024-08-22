@@ -2,23 +2,22 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
-      - master
-  pull_request:
-    branches:
-      - main
-      - master
+    branches: [main, master]
+    paths-ignore: [README.md]
   release:
-    types: [created]
+    types: [published]
   workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build_and_release:
     runs-on: ubuntu-latest
     env:
       BUNDLE: coraza-waf-proxy
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -28,32 +27,28 @@ jobs:
       with:
         go-version: ^1.21
 
-    - name: Initialize Go module
-      run: |
-        go mod init github.com/${{ github.repository }}
-        go mod tidy
-
     - name: Build
       run: |
         go version
-        go env
+        go mod init github.com/${{ github.repository }}
+        go mod tidy
         go build -v -o ${{ env.BUNDLE }}
-        chmod +x ${{ env.BUNDLE }}
 
     - name: Pack assets
       run: |
-        mkdir release
-        cp ${{ env.BUNDLE }} LICENSE README.md release/ || true
-        tar cJf ${{ env.BUNDLE }}.tar.xz release
-        openssl sha256 ./${{ env.BUNDLE }} > sha256sum.txt
+        mkdir ${{ env.BUNDLE }}
+        cp ${{ env.BUNDLE }} LICENSE README.md ${{ env.BUNDLE }}/
+        tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+        openssl sha256 ./${{ env.BUNDLE }} >sha256sum.txt
         echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >> $GITHUB_ENV
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ env.BUNDLE }}.tar.xz
+        name: ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }} executable sha256 ${{ env.SHA256SUM }}
         path: |
           ${{ env.BUNDLE }}.tar.xz
+          ${{ env.BUNDLE }}
           sha256sum.txt
 
     - name: Upload release assets
@@ -61,4 +56,4 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }} ${{ env.BUNDLE }}.tar.xz sha256sum.txt --clobber
+        gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }} sha256sum.txt --clobber
