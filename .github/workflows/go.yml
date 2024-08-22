@@ -9,6 +9,8 @@ on:
     branches:
       - main
       - master
+  release:
+    types: [created]
   workflow_dispatch:
 
 jobs:
@@ -20,13 +22,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Debug info
-      run: |
-        echo "GitHub ref: ${{ github.ref }}"
-        echo "GitHub event name: ${{ github.event_name }}"
-        echo "Runner OS: ${{ runner.os }}"
-        echo "GitHub workflow: ${{ github.workflow }}"
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -66,4 +61,4 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }}.tar.xz sha256sum.txt --clobber
+        gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }} ${{ env.BUNDLE }}.tar.xz sha256sum.txt --clobber
